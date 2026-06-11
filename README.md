@@ -29,7 +29,7 @@ Swift 5.7 or newer (`xcode-select --install`).
 git clone https://github.com/YOURUSER/keepmic.git
 cd keepmic
 make install      # builds + installs the binary (no sudo on Homebrew-based Macs)
-keepmic install   # starts the background agent; runs automatically at login
+keepmic run       # starts the background agent; runs automatically at login
 ```
 
 That's it. Put your AirPods on and check System Settings → Sound: output is your
@@ -41,7 +41,7 @@ copy step only:
 
 ```sh
 make build && sudo make install-bin
-keepmic install   # never run this part with sudo — it's a per-user agent
+keepmic run       # never run this part with sudo — it's a per-user agent
 ```
 
 Upgrading later: `git pull && make install` rebuilds and restarts the agent.
@@ -58,7 +58,8 @@ keepmic prefer --clear   # back to the default (built-in mic)
 keepmic pause [minutes]  # actually need the AirPods mic? switches to it and stops
                          # enforcing for a while (default 30 min)
 keepmic resume           # end the pause and re-pin now
-keepmic uninstall        # stop and remove the agent
+keepmic quit             # stop keepmic and remove it from login
+keepmic run              # start it again
 ```
 
 Activity is logged to `~/Library/Logs/keepmic.log`.
@@ -104,7 +105,7 @@ Bluetooth mic for a while.
 ## Uninstall
 
 ```sh
-keepmic uninstall   # stop + remove the launchd agent
+keepmic quit        # stop + remove the launchd agent
 make uninstall      # remove the binary (from the repo directory)
 ```
 

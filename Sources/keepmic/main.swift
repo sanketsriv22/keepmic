@@ -10,15 +10,15 @@ Mac's mic whenever that happens, while leaving output on your headphones.
 
 usage: keepmic <command>
 
-  install             install + start the background agent (runs at login)
-  uninstall           stop + remove the background agent
+  run                 start keepmic in the background (also runs at login)
+  quit                stop keepmic and remove it from login
   status              show agent state, current devices, and config
   devices             list input devices
   prefer <name>       mic to pin instead of the built-in one (see `keepmic devices`)
   prefer --clear      go back to the default (built-in mic)
   pause [minutes]     switch to the Bluetooth mic temporarily (default: 30)
   resume              end a pause and re-pin the mic now
-  run                 run the guard in the foreground (what the agent runs)
+  daemon              run the guard in the foreground (what the agent runs)
   version             print version
 """
 
@@ -136,16 +136,16 @@ let arguments = Array(CommandLine.arguments.dropFirst())
 switch arguments.first {
 case nil, "help", "--help", "-h":
     print(help)
-case "run":
+case "daemon":
     Daemon().run()
-case "install":
+case "run", "install":  // `install` kept as an alias
     if getuid() == 0 {
-        fail("Don't run `keepmic install` with sudo — it sets up a per-user agent. Re-run as your normal user.")
+        fail("Don't run `keepmic run` with sudo — it sets up a per-user agent. Re-run as your normal user.")
     }
     do { try LaunchAgent.install(force: arguments.contains("--force")) } catch { fail("\(error)") }
-case "uninstall":
+case "quit", "uninstall":  // `uninstall` kept as an alias
     if getuid() == 0 {
-        fail("Don't run `keepmic uninstall` with sudo — it manages a per-user agent. Re-run as your normal user.")
+        fail("Don't run `keepmic quit` with sudo — it manages a per-user agent. Re-run as your normal user.")
     }
     LaunchAgent.uninstall()
 case "status":

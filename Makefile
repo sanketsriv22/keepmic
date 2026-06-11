@@ -10,21 +10,21 @@ build:
 install: build install-bin
 	@if [ -f "$(AGENT_PLIST)" ] && [ "$$(id -u)" != "0" ]; then \
 		echo "Restarting the keepmic agent with the new binary..."; \
-		"$(BINDIR)/keepmic" install; \
+		"$(BINDIR)/keepmic" run; \
 	else \
 		echo ""; \
 		echo "Installed $(BINDIR)/keepmic"; \
-		echo "Start the background agent with: keepmic install"; \
+		echo "Start the background agent with: keepmic run"; \
 	fi
 
 # Copy the already-built binary only — lets non-Homebrew users do:
-#   make build && sudo make install-bin && keepmic install
+#   make build && sudo make install-bin && keepmic run
 install-bin:
 	install -d "$(BINDIR)"
 	install ".build/release/keepmic" "$(BINDIR)/keepmic"
 
 uninstall:
-	-"$(BINDIR)/keepmic" uninstall 2>/dev/null || keepmic uninstall 2>/dev/null || true
+	-"$(BINDIR)/keepmic" quit 2>/dev/null || keepmic quit 2>/dev/null || true
 	rm -f "$(BINDIR)/keepmic"
 
 clean:

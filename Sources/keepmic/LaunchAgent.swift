@@ -31,9 +31,9 @@ enum LaunchAgent {
                 is cleaned or the repo is moved. Install the binary somewhere stable first:
 
                   make install      # from the repo root
-                  keepmic install
+                  keepmic run
 
-                (Or re-run with `keepmic install --force` if you really want this path.)
+                (Or re-run with `keepmic run --force` if you really want this path.)
                 """)
         }
 
@@ -47,7 +47,7 @@ enum LaunchAgent {
             <key>ProgramArguments</key>
             <array>
                 <string>\(xmlEscaped(binary))</string>
-                <string>run</string>
+                <string>daemon</string>
             </array>
             <key>RunAtLoad</key>
             <true/>
@@ -97,10 +97,10 @@ enum LaunchAgent {
                 + "Try manually: launchctl bootstrap \(domainTarget) \(plistURL.path)")
         }
 
-        print("keepmic agent installed and running (\(label))")
+        print("keepmic is running in the background (\(label))")
         print("  binary:  \(binary)")
         print("  log:     \(Paths.logFile.path)")
-        print("It starts automatically at login. Remove with: keepmic uninstall")
+        print("It starts automatically at login. Stop it with: keepmic quit")
         print("(macOS may show a \"Background Items Added\" notification — that's this agent.)")
     }
 
@@ -110,9 +110,9 @@ enum LaunchAgent {
         try? FileManager.default.removeItem(at: Paths.launchAgentPlist)
 
         if result.status == 0 || plistExisted {
-            print("keepmic agent stopped and removed.")
+            print("keepmic stopped and removed from login. Start it again with: keepmic run")
         } else {
-            print("keepmic agent was not installed.")
+            print("keepmic was not running.")
         }
     }
 
