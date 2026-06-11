@@ -26,7 +26,7 @@ Requires macOS 12+ to run. Building needs the Xcode Command Line Tools with
 Swift 5.7 or newer (`xcode-select --install`).
 
 ```sh
-git clone https://github.com/YOURUSER/keepmic.git
+git clone https://github.com/sanketsriv22/keepmic.git
 cd keepmic
 make install      # builds + installs the binary (no sudo on Homebrew-based Macs)
 keepmic run       # starts the background agent; runs automatically at login
