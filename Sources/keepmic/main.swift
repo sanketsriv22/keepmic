@@ -14,8 +14,8 @@ usage: keepmic <command>
   quit                stop keepmic and remove it from login
   status              show agent state, current devices, and config
   devices             list input devices
-  prefer <name>       mic to pin instead of the built-in one (see `keepmic devices`)
-  prefer --clear      go back to the default (built-in mic)
+  prefer <name>       always use this mic while it's connected (see `keepmic devices`)
+  prefer --clear      go back to the default (built-in mic, guard Bluetooth only)
   pause [minutes]     switch to the Bluetooth mic temporarily (default: 30)
   resume              end a pause and re-pin the mic now
   daemon              run the guard in the foreground (what the agent runs)
@@ -85,7 +85,7 @@ func commandPrefer(_ args: [String]) {
         config.preferredInput = match.name
         config.preferredInputUID = match.uid
         do { try config.save() } catch { fail("Could not save config: \(error)") }
-        print("Preferred input set to \(quoted(match.name)).")
+        print("Preferred input set to \(quoted(match.name)) — it will be the default input whenever it's connected.")
     } else if AudioSystem.inputDevices.contains(where: { deviceNamesMatch($0.name, name) }) {
         fail("\(quoted(name)) is a Bluetooth device — keepmic's whole job is keeping input off those.")
     } else {

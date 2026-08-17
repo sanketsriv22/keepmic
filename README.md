@@ -53,8 +53,8 @@ You shouldn't need to touch it again, but:
 ```
 keepmic status           # agent state + current input/output devices
 keepmic devices          # list input devices
-keepmic prefer <name>    # pin a specific mic instead of the built-in one
-keepmic prefer --clear   # back to the default (built-in mic)
+keepmic prefer <name>    # always use this mic as input while it's connected
+keepmic prefer --clear   # back to the default (built-in mic, guard Bluetooth only)
 keepmic pause [minutes]  # actually need the AirPods mic? switches to it and stops
                          # enforcing for a while (default 30 min)
 keepmic resume           # end the pause and re-pin now
@@ -87,8 +87,10 @@ default input to your Bluetooth mic and stops enforcing (30 minutes by default;
 meeting app — apps that let you choose a specific device bypass the system default,
 and keepmic only manages the system default.
 
-**What about my USB/desk mic?** `keepmic prefer "Your Mic Name"` pins that instead of
-the built-in mic. If it's unplugged, keepmic falls back to the built-in mic.
+**What about my USB/desk mic?** `keepmic prefer "Your Mic Name"` makes that mic the
+default input whenever it's connected — plug it in and input switches to it, unplug it
+and keepmic falls back to the built-in mic. Bluetooth devices still never get the input
+either way.
 
 **What if my Mac has no microphone at all?** If there's no physical non-Bluetooth
 input (e.g. a Mac mini with only AirPods), keepmic leaves the input alone rather than

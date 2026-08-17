@@ -26,11 +26,30 @@ final class Daemon {
     }
 
     /// One-shot enforcement, also used by `keepmic resume` from the CLI.
+    ///
+    /// Two rules, in order:
+    /// 1. If the preferred device (`keepmic prefer`) is connected, it must be
+    ///    the default input — a preferred mic always wins while present.
+    /// 2. Otherwise, if a Bluetooth device holds the default input, pin it
+    ///    back to the best physical mic.
     @discardableResult
     static func enforceOnce(reportSkips: Bool = false) -> Bool {
         guard let current = AudioSystem.defaultInput else { return false }
+        let nonBluetooth = AudioSystem.inputDevices.filter { !$0.isBluetooth }
+
+        if let preferred = connectedPreferred(among: nonBluetooth) {
+            guard preferred != current else { return false }
+            guard AudioSystem.setDefaultInput(preferred) else {
+                log("failed to set default input to \(quoted(preferred.name))")
+                return false
+            }
+            log("default input was \(quoted(current.name)) — switched to preferred \(quoted(preferred.name))")
+            return true
+        }
+
         guard current.isBluetooth else { return false }
-        guard let target = pickFallback() else {
+        let physical = nonBluetooth.filter { !$0.isVirtual }
+        guard let target = physical.min(by: { ($0.fallbackRank, $0.name) < ($1.fallbackRank, $1.name) }) else {
             if reportSkips {
                 log("default input is \(quoted(current.name)) but no physical non-Bluetooth mic is available — leaving it")
             }
@@ -44,29 +63,19 @@ final class Daemon {
         return true
     }
 
-    /// Picks the device to pin input to: the configured preferred device if
-    /// present, else the built-in mic, else the best-ranked physical input.
-    /// Virtual/aggregate devices (loopbacks like BlackHole) are never chosen
-    /// automatically — only when explicitly set via `keepmic prefer`.
-    static func pickFallback() -> AudioDevice? {
-        let nonBluetooth = AudioSystem.inputDevices.filter { !$0.isBluetooth }
-        guard !nonBluetooth.isEmpty else { return nil }
-
+    /// The configured preferred device, if it's currently connected.
+    /// Matched by stable UID first, then by (apostrophe/case-tolerant) name.
+    static func connectedPreferred(among nonBluetooth: [AudioDevice]) -> AudioDevice? {
         let config = Config.load()
-        if config.preferredInput != nil || config.preferredInputUID != nil {
-            if let uid = config.preferredInputUID,
-               let match = nonBluetooth.first(where: { $0.uid == uid }) {
-                return match
-            }
-            if let name = config.preferredInput,
-               let match = nonBluetooth.first(where: { deviceNamesMatch($0.name, name) }) {
-                return match
-            }
-            log("preferred input \(quoted(config.preferredInput ?? "?")) is not connected — falling back")
+        if let uid = config.preferredInputUID,
+           let match = nonBluetooth.first(where: { $0.uid == uid }) {
+            return match
         }
-
-        let physical = nonBluetooth.filter { !$0.isVirtual }
-        return physical.min { ($0.fallbackRank, $0.name) < ($1.fallbackRank, $1.name) }
+        if let name = config.preferredInput,
+           let match = nonBluetooth.first(where: { deviceNamesMatch($0.name, name) }) {
+            return match
+        }
+        return nil
     }
 
     private func enforce(trigger: String) {
