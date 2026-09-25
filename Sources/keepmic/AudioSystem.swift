@@ -174,6 +174,10 @@ enum AudioSystem {
         allDevices.filter { $0.hasInput }
     }
 
+    static var outputDevices: [AudioDevice] {
+        allDevices.filter { $0.outputChannelCount > 0 }
+    }
+
     static var defaultInput: AudioDevice? {
         var addr = propertyAddress(kAudioHardwarePropertyDefaultInputDevice)
         var id = AudioDeviceID(0)
@@ -195,6 +199,14 @@ enum AudioSystem {
     @discardableResult
     static func setDefaultInput(_ device: AudioDevice) -> Bool {
         var addr = propertyAddress(kAudioHardwarePropertyDefaultInputDevice)
+        var id = device.id
+        let size = UInt32(MemoryLayout<AudioDeviceID>.size)
+        return AudioObjectSetPropertyData(systemObject, &addr, 0, nil, size, &id) == noErr
+    }
+
+    @discardableResult
+    static func setDefaultOutput(_ device: AudioDevice) -> Bool {
+        var addr = propertyAddress(kAudioHardwarePropertyDefaultOutputDevice)
         var id = device.id
         let size = UInt32(MemoryLayout<AudioDeviceID>.size)
         return AudioObjectSetPropertyData(systemObject, &addr, 0, nil, size, &id) == noErr

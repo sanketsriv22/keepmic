@@ -14,7 +14,7 @@ Bluetooth device takes it over — while leaving **output** on your headphones. 
 AirPods off and on all day; the mic setting stays correct every time, with nothing to
 click and nothing in your menu bar.
 
-- **Zero UI** — no menu bar icon, no Dock icon, no windows
+- **Zero UI** — no menu bar icon, no Dock icon, no windows (a menu bar icon is opt-in)
 - **Zero polling** — event-driven via CoreAudio listeners; it sleeps until something changes
 - **Zero dependencies** — one small Swift binary, no runtime, no frameworks to install
 - **No permissions needed** — it never records audio, it only changes the default device,
@@ -58,11 +58,38 @@ keepmic prefer --clear   # back to the default (built-in mic, guard Bluetooth on
 keepmic pause [minutes]  # actually need the AirPods mic? switches to it and stops
                          # enforcing for a while (default 30 min)
 keepmic resume           # end the pause and re-pin now
+keepmic menubar on       # optional menu bar icon (see below)
+keepmic menubar off      # remove it
 keepmic quit             # stop keepmic and remove it from login
 keepmic run              # start it again
 ```
 
 Activity is logged to `~/Library/Logs/keepmic.log`.
+
+## Menu bar icon
+
+keepmic has no UI by default. If you want to see what it's doing at a glance, turn on
+the menu bar icon:
+
+```sh
+keepmic menubar on
+```
+
+The menu shows:
+
+- **Output:** every output device, with a check on the current one. Click one to switch.
+- **Input priority:** your mics in the order keepmic picks them. Your preferred mic
+  comes first, even when unplugged, then wired earbuds, then the built-in mic and the
+  rest. Bluetooth mics are listed at the bottom as never used. The current input has a
+  check. Click a mic to make it your preferred one.
+- **Pause and resume**, clearing the preferred mic, and the log.
+
+The icon is a mic while keepmic is guarding, a pause symbol while paused, and a
+crossed-out mic if the guard isn't running. Hover it for the current input and output.
+
+The icon runs as its own login agent, separate from the guard, so it can't stop the
+guard from working. `keepmic menubar off` or "Hide menu bar icon" removes it, and
+`keepmic quit` removes both.
 
 ## How it works
 

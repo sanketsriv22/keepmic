@@ -1,8 +1,17 @@
 import Darwin
 import Foundation
 
-enum LaunchAgent {
-    static let label = "com.keepmic.agent"
+/// A per-user launchd agent that runs this binary with some arguments.
+/// keepmic has two: the guard (`daemon`) and the optional menu bar icon.
+struct LaunchAgent {
+    let label: String
+    let arguments: [String]
+    /// launchd ProcessType. The guard is "Background"; the menu bar app is
+    /// "Interactive" so macOS doesn't throttle it while you're using the menu.
+    let processType: String
+
+    static let guardAgent = LaunchAgent(label: "com.keepmic.agent", arguments: ["daemon"], processType: "Background")
+    static let menuBar = LaunchAgent(label: "com.keepmic.menubar", arguments: ["menubar-app"], processType: "Interactive")
 
     /// Absolute path of the currently running binary. The launchd plist points
     /// here, so install from the binary's final location. Symlinks are kept
@@ -14,11 +23,21 @@ enum LaunchAgent {
         return URL(fileURLWithPath: CommandLine.arguments[0]).standardizedFileURL.path
     }
 
-    private static var serviceTarget: String { "gui/\(getuid())/\(label)" }
-    private static var domainTarget: String { "gui/\(getuid())" }
+    var plistURL: URL {
+        Paths.home.appendingPathComponent("Library/LaunchAgents/\(label).plist")
+    }
 
-    static func install(force: Bool = false) throws {
-        let binary = binaryPath
+    private var serviceTarget: String { "gui/\(getuid())/\(label)" }
+    private var domainTarget: String { "gui/\(getuid())" }
+
+    var isInstalled: Bool { FileManager.default.fileExists(atPath: plistURL.path) }
+
+    var isRunning: Bool {
+        Self.launchctl(["print", serviceTarget]).status == 0
+    }
+
+    func install(force: Bool = false) throws {
+        let binary = Self.binaryPath
 
         // A plist pointing into a build directory turns into a respawn loop of
         // a missing binary as soon as the repo is cleaned or deleted.
@@ -33,9 +52,13 @@ enum LaunchAgent {
                   make install      # from the repo root
                   keepmic run
 
-                (Or re-run with `keepmic run --force` if you really want this path.)
+                (Or re-run with `--force` if you really want this path.)
                 """)
         }
+
+        let programArguments = ([binary] + arguments)
+            .map { "        <string>\(Self.xmlEscaped($0))</string>" }
+            .joined(separator: "\n")
 
         let plist = """
         <?xml version="1.0" encoding="UTF-8"?>
@@ -46,8 +69,7 @@ enum LaunchAgent {
             <string>\(label)</string>
             <key>ProgramArguments</key>
             <array>
-                <string>\(xmlEscaped(binary))</string>
-                <string>daemon</string>
+        \(programArguments)
             </array>
             <key>RunAtLoad</key>
             <true/>
@@ -55,39 +77,38 @@ enum LaunchAgent {
             <dict>
                 <key>PathState</key>
                 <dict>
-                    <key>\(xmlEscaped(binary))</key>
+                    <key>\(Self.xmlEscaped(binary))</key>
                     <true/>
                 </dict>
             </dict>
             <key>ProcessType</key>
-            <string>Background</string>
+            <string>\(processType)</string>
             <key>StandardOutPath</key>
-            <string>\(xmlEscaped(Paths.logFile.path))</string>
+            <string>\(Self.xmlEscaped(Paths.logFile.path))</string>
             <key>StandardErrorPath</key>
-            <string>\(xmlEscaped(Paths.logFile.path))</string>
+            <string>\(Self.xmlEscaped(Paths.logFile.path))</string>
         </dict>
         </plist>
         """
 
-        let plistURL = Paths.launchAgentPlist
         try FileManager.default.createDirectory(
             at: plistURL.deletingLastPathComponent(), withIntermediateDirectories: true)
 
         // Unload any previous version, then wait for launchd to let go of the
-        // service before bootstrapping again — back-to-back bootout/bootstrap
+        // service before bootstrapping again. Back-to-back bootout/bootstrap
         // can fail intermittently otherwise.
-        _ = launchctl(["bootout", serviceTarget])
-        for _ in 0..<10 where launchctl(["print", serviceTarget]).status == 0 {
+        _ = Self.launchctl(["bootout", serviceTarget])
+        for _ in 0..<10 where Self.launchctl(["print", serviceTarget]).status == 0 {
             usleep(100_000)
         }
 
         try plist.write(to: plistURL, atomically: true, encoding: .utf8)
 
-        var result = launchctl(["bootstrap", domainTarget, plistURL.path])
+        var result = Self.launchctl(["bootstrap", domainTarget, plistURL.path])
         var attempts = 1
         while result.status != 0 && attempts < 4 {
             usleep(300_000)
-            result = launchctl(["bootstrap", domainTarget, plistURL.path])
+            result = Self.launchctl(["bootstrap", domainTarget, plistURL.path])
             attempts += 1
         }
         guard result.status == 0 else {
@@ -96,28 +117,17 @@ enum LaunchAgent {
                 "launchctl bootstrap failed (\(result.status)): \(result.output)\n"
                 + "Try manually: launchctl bootstrap \(domainTarget) \(plistURL.path)")
         }
-
-        print("keepmic is running in the background (\(label))")
-        print("  binary:  \(binary)")
-        print("  log:     \(Paths.logFile.path)")
-        print("It starts automatically at login. Stop it with: keepmic quit")
-        print("(macOS may show a \"Background Items Added\" notification — that's this agent.)")
     }
 
-    static func uninstall() {
-        let result = launchctl(["bootout", serviceTarget])
-        let plistExisted = FileManager.default.fileExists(atPath: Paths.launchAgentPlist.path)
-        try? FileManager.default.removeItem(at: Paths.launchAgentPlist)
-
-        if result.status == 0 || plistExisted {
-            print("keepmic stopped and removed from login. Start it again with: keepmic run")
-        } else {
-            print("keepmic was not running.")
-        }
-    }
-
-    static var isRunning: Bool {
-        launchctl(["print", serviceTarget]).status == 0
+    /// Removes the plist first, then unloads the service, so an agent can
+    /// uninstall itself (bootout kills the calling process when it's the
+    /// service being booted out). Returns whether anything was there.
+    @discardableResult
+    func uninstall() -> Bool {
+        let plistExisted = isInstalled
+        try? FileManager.default.removeItem(at: plistURL)
+        let result = Self.launchctl(["bootout", serviceTarget])
+        return result.status == 0 || plistExisted
     }
 
     private static func xmlEscaped(_ value: String) -> String {

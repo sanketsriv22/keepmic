@@ -18,6 +18,8 @@ usage: keepmic <command>
   prefer --clear      go back to the default (built-in mic, guard Bluetooth only)
   pause [minutes]     switch to the Bluetooth mic temporarily (default: 30)
   resume              end a pause and re-pin the mic now
+  menubar on          show a menu bar icon with your inputs, outputs, and mic priority
+  menubar off         remove the menu bar icon
   daemon              run the guard in the foreground (what the agent runs)
   version             print version
 """
@@ -29,7 +31,9 @@ func fail(_ message: String) -> Never {
 
 func commandStatus() {
     print("keepmic \(Version.current)")
-    print("agent:           \(LaunchAgent.isRunning ? "running" : "not running") (\(LaunchAgent.label))")
+    let guardAgent = LaunchAgent.guardAgent
+    print("agent:           \(guardAgent.isRunning ? "running" : "not running") (\(guardAgent.label))")
+    print("menu bar icon:   \(LaunchAgent.menuBar.isInstalled ? "on" : "off")")
 
     if let input = AudioSystem.defaultInput {
         print("default input:   \(input.name) (\(input.transportName))")
@@ -108,19 +112,62 @@ func commandPause(_ args: [String]) {
     } else {
         minutes = 30
     }
-    do { try Pause.set(minutes: minutes) } catch { fail("Could not write pause state: \(error)") }
+    let target: AudioDevice?
+    do { target = try Daemon.pause(minutes: minutes) } catch { fail("Could not write pause state: \(error)") }
 
     let until = Date().addingTimeInterval(TimeInterval(minutes) * 60)
-    print("Paused until \(Daemon.timeString(until)) — Bluetooth mics are allowed until then.")
-
-    // Hand the mic to the Bluetooth headphones right away — that's almost
-    // always why someone pauses. Prefer the device currently used for output.
-    let bluetoothInputs = AudioSystem.inputDevices.filter { $0.isBluetooth }
-    let target = bluetoothInputs.first { $0.id == AudioSystem.defaultOutput?.id } ?? bluetoothInputs.first
-    if let target, AudioSystem.defaultInput?.id != target.id, AudioSystem.setDefaultInput(target) {
+    print("Paused until \(Daemon.timeString(until)). Bluetooth mics are allowed until then.")
+    if let target {
         print("Default input switched to \(quoted(target.name)).")
     }
     print("End it early with: keepmic resume")
+}
+
+func commandRun(force: Bool) {
+    do {
+        try LaunchAgent.guardAgent.install(force: force)
+        // Restart the menu bar icon too, so it picks up a new binary.
+        if LaunchAgent.menuBar.isInstalled {
+            try LaunchAgent.menuBar.install(force: force)
+        }
+    } catch { fail("\(error)") }
+    print("keepmic is running in the background (\(LaunchAgent.guardAgent.label))")
+    print("  binary:  \(LaunchAgent.binaryPath)")
+    print("  log:     \(Paths.logFile.path)")
+    print("It starts automatically at login. Stop it with: keepmic quit")
+    print("Want a menu bar icon? keepmic menubar on")
+    print("(macOS may show a \"Background Items Added\" notification. That's this agent.)")
+}
+
+func commandQuit() {
+    let menuBarRemoved = LaunchAgent.menuBar.uninstall()
+    if LaunchAgent.guardAgent.uninstall() || menuBarRemoved {
+        print("keepmic stopped and removed from login. Start it again with: keepmic run")
+    } else {
+        print("keepmic was not running.")
+    }
+}
+
+func commandMenuBar(_ args: [String]) {
+    switch args.first {
+    case "on":
+        do { try LaunchAgent.menuBar.install(force: args.contains("--force")) } catch { fail("\(error)") }
+        print("Menu bar icon is on. It starts at login. Remove it with: keepmic menubar off")
+        if !LaunchAgent.guardAgent.isRunning {
+            print("Note: the keepmic guard isn't running. Start it with: keepmic run")
+        }
+    case "off":
+        if LaunchAgent.menuBar.uninstall() {
+            print("Menu bar icon removed. The keepmic guard keeps running.")
+        } else {
+            print("The menu bar icon wasn't on.")
+        }
+    case nil:
+        print("menu bar icon: \(LaunchAgent.menuBar.isInstalled ? "on" : "off")")
+        print("Turn it on or off with: keepmic menubar on|off")
+    case let other?:
+        fail("Unknown option: \(other). Use: keepmic menubar on|off")
+    }
 }
 
 func commandResume() {
@@ -143,12 +190,16 @@ case "run", "install":  // `install` kept as an alias
     if getuid() == 0 {
         fail("Don't run `keepmic run` with sudo — it sets up a per-user agent. Re-run as your normal user.")
     }
-    do { try LaunchAgent.install(force: arguments.contains("--force")) } catch { fail("\(error)") }
+    commandRun(force: arguments.contains("--force"))
 case "quit", "uninstall":  // `uninstall` kept as an alias
     if getuid() == 0 {
         fail("Don't run `keepmic quit` with sudo — it manages a per-user agent. Re-run as your normal user.")
     }
-    LaunchAgent.uninstall()
+    commandQuit()
+case "menubar":
+    commandMenuBar(Array(arguments.dropFirst()))
+case "menubar-app":  // what the menu bar agent runs
+    MenuBarApp.run()
 case "status":
     commandStatus()
 case "devices":

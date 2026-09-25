@@ -76,6 +76,58 @@ final class Daemon {
         return true
     }
 
+    /// One row of the input priority list, in the order keepmic picks mics.
+    struct PriorityEntry {
+        enum Role { case preferred, wiredHeadset, fallback }
+        let name: String
+        /// nil when the entry is a preferred device that isn't connected.
+        let device: AudioDevice?
+        let role: Role
+    }
+
+    /// The order keepmic picks inputs in: the preferred mic (listed even when
+    /// it's unplugged), then wired headset mics, then the other physical
+    /// non-Bluetooth mics by fallback rank. Bluetooth mics never appear.
+    static func inputPriority() -> [PriorityEntry] {
+        let nonBluetooth = AudioSystem.inputDevices.filter { !$0.isBluetooth }
+        var entries: [PriorityEntry] = []
+
+        let preferred = connectedPreferred(among: nonBluetooth)
+        let config = Config.load()
+        if let preferred {
+            entries.append(PriorityEntry(name: preferred.name, device: preferred, role: .preferred))
+        } else if let name = config.preferredInput {
+            entries.append(PriorityEntry(name: name, device: nil, role: .preferred))
+        }
+
+        let physical = nonBluetooth
+            .filter { !$0.isVirtual && $0 != preferred }
+            .sorted { ($0.fallbackRank, $0.name) < ($1.fallbackRank, $1.name) }
+        for device in physical {
+            entries.append(PriorityEntry(
+                name: device.name, device: device,
+                role: device.isWiredHeadsetMic ? .wiredHeadset : .fallback))
+        }
+        return entries
+    }
+
+    /// Starts a pause and hands the mic to the Bluetooth headphones, which is
+    /// almost always why someone pauses. Prefers the device used for output,
+    /// matched by name since some headsets split input and output into two
+    /// devices. Returns the device switched to, if any.
+    @discardableResult
+    static func pause(minutes: Int) throws -> AudioDevice? {
+        try Pause.set(minutes: minutes)
+        let bluetoothInputs = AudioSystem.inputDevices.filter { $0.isBluetooth }
+        let output = AudioSystem.defaultOutput
+        let target = bluetoothInputs.first { $0.id == output?.id || $0.name == output?.name }
+            ?? bluetoothInputs.first
+        guard let target, AudioSystem.defaultInput?.id != target.id,
+              AudioSystem.setDefaultInput(target) else { return nil }
+        log("paused for \(minutes) min, default input switched to \(quoted(target.name))")
+        return target
+    }
+
     /// The configured preferred device, if it's currently connected.
     /// Matched by stable UID first, then by (apostrophe/case-tolerant) name.
     static func connectedPreferred(among nonBluetooth: [AudioDevice]) -> AudioDevice? {

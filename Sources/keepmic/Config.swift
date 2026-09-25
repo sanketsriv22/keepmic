@@ -1,7 +1,7 @@
 import Foundation
 
 enum Version {
-    static let current = "0.3.0"
+    static let current = "0.4.0"
 }
 
 enum Paths {
@@ -13,8 +13,6 @@ enum Paths {
     static let pauseFile = stateDir.appendingPathComponent("paused-until")
 
     static let logFile = home.appendingPathComponent("Library/Logs/keepmic.log")
-    static let launchAgentPlist = home.appendingPathComponent(
-        "Library/LaunchAgents/\(LaunchAgent.label).plist")
 }
 
 struct Config: Codable {
