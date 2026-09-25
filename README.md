@@ -87,6 +87,12 @@ default input to your Bluetooth mic and stops enforcing (30 minutes by default;
 meeting app — apps that let you choose a specific device bypass the system default,
 and keepmic only manages the system default.
 
+**What about wired earbuds?** If wired earbuds or a wired headset are plugged in,
+their mic wins automatically, even with AirPods in. keepmic moves the input to them
+from the AirPods mic or the Mac's internal mic. This covers the headphone-jack mic and
+USB or USB-C earbuds. A USB device counts as a headset when it has both a mic and an
+output, so webcams don't. Unplug them and input falls back to the built-in mic.
+
 **What about my USB/desk mic?** `keepmic prefer "Your Mic Name"` makes that mic the
 default input whenever it's connected — plug it in and input switches to it, unplug it
 and keepmic falls back to the built-in mic. Bluetooth devices still never get the input

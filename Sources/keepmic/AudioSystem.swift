@@ -43,6 +43,38 @@ struct AudioDevice: Equatable {
 
     var isBuiltIn: Bool { transportType == kAudioDeviceTransportTypeBuiltIn }
 
+    /// Current input data source (a four-char code), if the device has one.
+    /// Intel Macs flip the built-in mic's source to 'emic' when a headset is
+    /// plugged into the jack; Apple Silicon Macs publish a separate device.
+    var inputDataSource: UInt32? {
+        var addr = propertyAddress(kAudioDevicePropertyDataSource, scope: kAudioDevicePropertyScopeInput)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        guard AudioObjectHasProperty(id, &addr),
+              AudioObjectGetPropertyData(id, &addr, 0, nil, &size, &value) == noErr else { return nil }
+        return value
+    }
+
+    /// A mic on wired earbuds or a wired headset: the headphone-jack mic, or
+    /// a USB device with both input and output (USB-C earbuds, USB headsets).
+    /// USB webcams have no output, so they don't count.
+    var isWiredHeadsetMic: Bool {
+        guard hasInput else { return false }
+        switch transportType {
+        case kAudioDeviceTransportTypeBuiltIn:
+            if inputDataSource == fourCC("emic") { return true }
+            let lowered = name.lowercased()
+            return lowered.contains("external") || lowered.contains("headset")
+        case kAudioDeviceTransportTypeUSB:
+            return outputChannelCount > 0
+        default:
+            return false
+        }
+    }
+
+    /// The Mac's own internal mic (not the headphone-jack mic).
+    var isInternalMic: Bool { isBuiltIn && hasInput && !isWiredHeadsetMic }
+
     /// Loopback/aggregate devices (BlackHole, multi-output setups, …) — never
     /// suitable as an automatic mic fallback.
     var isVirtual: Bool {
@@ -73,6 +105,7 @@ struct AudioDevice: Equatable {
     /// Rank used when picking a fallback input: lower is better. Physical,
     /// always-present devices first; virtual/aggregate devices last.
     var fallbackRank: Int {
+        if isWiredHeadsetMic { return -1 }
         switch transportType {
         case kAudioDeviceTransportTypeBuiltIn: return 0
         case kAudioDeviceTransportTypeUSB: return 1
@@ -85,8 +118,11 @@ struct AudioDevice: Equatable {
         }
     }
 
-    var inputChannelCount: Int {
-        var addr = propertyAddress(kAudioDevicePropertyStreamConfiguration, scope: kAudioDevicePropertyScopeInput)
+    var inputChannelCount: Int { channelCount(scope: kAudioDevicePropertyScopeInput) }
+    var outputChannelCount: Int { channelCount(scope: kAudioDevicePropertyScopeOutput) }
+
+    private func channelCount(scope: AudioObjectPropertyScope) -> Int {
+        var addr = propertyAddress(kAudioDevicePropertyStreamConfiguration, scope: scope)
         var size: UInt32 = 0
         guard AudioObjectGetPropertyDataSize(id, &addr, 0, nil, &size) == noErr, size > 0 else { return 0 }
         let raw = UnsafeMutableRawPointer.allocate(
@@ -161,6 +197,10 @@ enum AudioSystem {
         var addr = propertyAddress(selector)
         AudioObjectAddPropertyListenerBlock(systemObject, &addr, queue) { _, _ in handler() }
     }
+}
+
+private func fourCC(_ code: String) -> UInt32 {
+    code.utf8.reduce(0) { ($0 << 8) | UInt32($1) }
 }
 
 /// Device-name comparison tolerant of the curly apostrophe macOS puts in

@@ -61,7 +61,8 @@ func commandDevices() {
     print("Input devices (* = current default):")
     for device in devices {
         let marker = device.id == defaultID ? "*" : " "
-        print("  \(marker) \(device.name)  [\(device.transportName)]")
+        let kind = device.isWiredHeadsetMic ? "wired headset" : device.transportName
+        print("  \(marker) \(device.name)  [\(kind)]")
     }
 }
 

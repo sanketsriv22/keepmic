@@ -27,10 +27,12 @@ final class Daemon {
 
     /// One-shot enforcement, also used by `keepmic resume` from the CLI.
     ///
-    /// Two rules, in order:
+    /// Three rules, in order:
     /// 1. If the preferred device (`keepmic prefer`) is connected, it must be
-    ///    the default input — a preferred mic always wins while present.
-    /// 2. Otherwise, if a Bluetooth device holds the default input, pin it
+    ///    the default input. A preferred mic always wins while present.
+    /// 2. Otherwise, if wired earbuds or a wired headset are plugged in, their
+    ///    mic takes over from a Bluetooth mic or the Mac's internal mic.
+    /// 3. Otherwise, if a Bluetooth device holds the default input, pin it
     ///    back to the best physical mic.
     @discardableResult
     static func enforceOnce(reportSkips: Bool = false) -> Bool {
@@ -44,6 +46,17 @@ final class Daemon {
                 return false
             }
             log("default input was \(quoted(current.name)) — switched to preferred \(quoted(preferred.name))")
+            return true
+        }
+
+        if current.isBluetooth || current.isInternalMic,
+           !current.isWiredHeadsetMic,
+           let headset = nonBluetooth.filter({ $0.isWiredHeadsetMic }).min(by: { $0.name < $1.name }) {
+            guard AudioSystem.setDefaultInput(headset) else {
+                log("failed to set default input to \(quoted(headset.name))")
+                return false
+            }
+            log("default input was \(quoted(current.name)) (\(current.transportName)), switched to wired headset mic \(quoted(headset.name))")
             return true
         }
 
