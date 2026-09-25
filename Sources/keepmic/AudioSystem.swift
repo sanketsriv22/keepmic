@@ -27,6 +27,10 @@ struct AudioDevice: Equatable {
         cfStringProperty(kAudioDevicePropertyDeviceUID)
     }
 
+    var modelUID: String? {
+        cfStringProperty(kAudioDevicePropertyModelUID)
+    }
+
     var transportType: UInt32 {
         var addr = propertyAddress(kAudioDevicePropertyTransportType)
         var value: UInt32 = 0
@@ -57,7 +61,9 @@ struct AudioDevice: Equatable {
 
     /// A mic on wired earbuds or a wired headset: the headphone-jack mic, or
     /// a USB device with both input and output (USB-C earbuds, USB headsets).
-    /// USB webcams have no output, so they don't count.
+    /// Some USB headsets, like USB-C EarPods, publish the mic and the
+    /// headphones as two devices that share a model UID, so a sibling with
+    /// output counts too. USB webcams have no output, so they don't count.
     var isWiredHeadsetMic: Bool {
         guard hasInput else { return false }
         switch transportType {
@@ -66,7 +72,12 @@ struct AudioDevice: Equatable {
             let lowered = name.lowercased()
             return lowered.contains("external") || lowered.contains("headset")
         case kAudioDeviceTransportTypeUSB:
-            return outputChannelCount > 0
+            if outputChannelCount > 0 { return true }
+            guard let model = modelUID else { return false }
+            return AudioSystem.allDevices.contains {
+                $0 != self && $0.transportType == kAudioDeviceTransportTypeUSB
+                    && $0.modelUID == model && $0.outputChannelCount > 0
+            }
         default:
             return false
         }
